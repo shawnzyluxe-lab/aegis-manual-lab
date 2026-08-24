@@ -19,6 +19,7 @@ integrate with `run_daily.py`.
 import csv
 import json
 import os
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -28,6 +29,16 @@ from pathlib import Path
 
 USER_AGENT = "aegis-manual-lab/0.1 (read-only observation sandbox)"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles?granularity=900"
+
+# macOS python.org builds sometimes lack system root certs; fall back to certifi
+# if available, otherwise use an unverified context. No exchange write endpoints
+# or secrets are involved.
+try:
+    import certifi
+
+    _SSL_CONTEXT: ssl.SSLContext | None = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    _SSL_CONTEXT = ssl._create_unverified_context()
 
 # 10 major -USD coin pairs.
 UNIVERSE = [
@@ -86,7 +97,7 @@ class Alert:
 
 def _fetch_json(url: str, timeout: int = 15) -> dict | list:
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    with urllib.request.urlopen(request, timeout=timeout, context=_SSL_CONTEXT) as response:
         return json.loads(response.read().decode("utf-8"))
 
 
@@ -278,11 +289,9 @@ def main() -> int:
     print("starting 15-minute background loop. press Ctrl+C to stop.\n")
 
     while True:
-        # Clear the terminal so every wake-up refresh is clean and live.
-        if os.name == "nt":
-            os.system("cls")
-        else:
-            os.system("clear")
+        # Mark a fresh wake-up without clearing the terminal; this keeps screen
+        # sessions and raw terminals from rendering escape-sequence garbage.
+        print("\n" + "=" * 68)
 
         now = datetime.now(timezone.utc).isoformat()
         print(f"[{now}] heartbeat — fetching 15m candles from Coinbase public API...\n")
