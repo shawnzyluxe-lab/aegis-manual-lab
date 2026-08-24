@@ -11,13 +11,18 @@ LAB_DIR="$HOME/Desktop/AegisManualLab"
 mkdir -p "$LAB_DIR"
 cd "$LAB_DIR"
 
-echo "[setup] downloading manual_lab.py ..."
+echo "[setup] downloading latest manual_lab.py ..."
 curl -fsSL -o manual_lab.py \
   "https://raw.githubusercontent.com/shawnzyluxe-lab/aegis-manual-lab/main/manual_lab.py"
 
-echo "[setup] downloading manual_journal.csv ..."
-curl -fsSL -o manual_journal.csv \
-  "https://raw.githubusercontent.com/shawnzyluxe-lab/aegis-manual-lab/main/manual_journal.csv"
+if [ ! -f manual_journal.csv ]; then
+  echo "[setup] creating manual_journal.csv ..."
+  curl -fsSL -o manual_journal.csv \
+    "https://raw.githubusercontent.com/shawnzyluxe-lab/aegis-manual-lab/main/manual_journal.csv"
+fi
+
+echo "[setup] stopping any existing manual_lab screen session ..."
+screen -X -S manual_lab quit >/dev/null 2>&1 || true
 
 echo "[setup] verifying Python 3 ..."
 if ! command -v python3 >/dev/null 2>&1; then
@@ -27,6 +32,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 echo "[setup] starting live auto-refresh session ..."
+sleep 1
 screen -dmS manual_lab python3 -u "$LAB_DIR/manual_lab.py"
 
 echo "[setup] attaching to the live terminal ..."
