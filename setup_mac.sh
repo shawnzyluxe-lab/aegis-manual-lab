@@ -1,31 +1,44 @@
 #!/bin/bash
 # setup_mac.sh — one-step installer for the Aegis Manual Crypto Lab on macOS.
 #
-# This script downloads the read-only advisory script to a folder on your Desktop,
-# verifies Python 3 is installed, then starts a `screen` session that auto-refreshes
-# every 15 minutes.
+# This script clones/pulls the read-only advisory script to a folder on your
+# Desktop, verifies Python 3 is installed, then starts a `screen` session that
+# auto-refreshes every 15 minutes.
 
 set -e
 
+REPO_URL="https://github.com/shawnzyluxe-lab/aegis-manual-lab.git"
 LAB_DIR="$HOME/Desktop/AegisManualLab"
-mkdir -p "$LAB_DIR"
-cd "$LAB_DIR"
 
-CACHE_BUST=$(date +%s)
+# Preserve any existing journal before wiping/re-cloning the directory.
+JOURNAL_BACKUP="/tmp/manual_journal_backup_$$.csv"
+if [ -f "$LAB_DIR/manual_journal.csv" ]; then
+  cp "$LAB_DIR/manual_journal.csv" "$JOURNAL_BACKUP"
+fi
 
-echo "[setup] downloading latest manual_lab.py ..."
-rm -f manual_lab.py
-if ! curl -fsSL -o manual_lab.py \
-    "https://raw.githubusercontent.com/shawnzyluxe-lab/aegis-manual-lab/main/manual_lab.py?nocache=${CACHE_BUST}"; then
-  echo "ERROR: could not download manual_lab.py. Check network / GitHub raw cache."
+echo "[setup] checking for git ..."
+if ! command -v git >/dev/null 2>&1; then
+  echo "ERROR: git not found. Install it with: xcode-select --install"
   exit 1
 fi
 
-if [ ! -f manual_journal.csv ]; then
-  echo "[setup] creating manual_journal.csv ..."
-  curl -fsSL -o manual_journal.csv \
-    "https://raw.githubusercontent.com/shawnzyluxe-lab/aegis-manual-lab/main/manual_journal.csv?nocache=${CACHE_BUST}"
+echo "[setup] pulling latest aegis-manual-lab into $LAB_DIR ..."
+if [ -d "$LAB_DIR/.git" ]; then
+  cd "$LAB_DIR"
+  git fetch --depth 1 origin main
+  git reset --hard origin/main
+else
+  rm -rf "$LAB_DIR"
+  git clone --depth 1 "$REPO_URL" "$LAB_DIR"
 fi
+
+# Restore the operator's journal so it isn't overwritten by the repo template.
+if [ -f "$JOURNAL_BACKUP" ]; then
+  cp "$JOURNAL_BACKUP" "$LAB_DIR/manual_journal.csv"
+  rm -f "$JOURNAL_BACKUP"
+fi
+
+cd "$LAB_DIR"
 
 echo "[setup] stopping any existing manual_lab screen sessions and processes ..."
 screen -ls 2>/dev/null | grep -E '\.manual_lab\s+' | awk '{print $1}' | while read -r session; do
