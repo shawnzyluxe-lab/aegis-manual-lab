@@ -19,6 +19,7 @@ integrate with `run_daily.py`.
 import csv
 import json
 import os
+import shutil
 import ssl
 import time
 import urllib.error
@@ -289,9 +290,10 @@ def main() -> int:
     print("starting 15-minute background loop. press Ctrl+C to stop.\n")
 
     while True:
-        # Mark a fresh wake-up without clearing the terminal; this keeps screen
-        # sessions and raw terminals from rendering escape-sequence garbage.
-        print("\n" + "=" * 68)
+        # Scroll the visible screen so old escape-sequence garbage is pushed out
+        # of view, then draw a fresh separator. No ANSI clear codes are used.
+        print("\n" * shutil.get_terminal_size().lines)
+        print("=" * 68)
 
         now = datetime.now(timezone.utc).isoformat()
         print(f"[{now}] heartbeat — fetching 15m candles from Coinbase public API...\n")
