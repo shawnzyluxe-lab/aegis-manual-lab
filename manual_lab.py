@@ -18,6 +18,7 @@ integrate with `run_daily.py`.
 
 import csv
 import json
+import os
 import time
 import urllib.error
 import urllib.request
@@ -278,7 +279,10 @@ def main() -> int:
 
     while True:
         # Clear the terminal so every wake-up refresh is clean and live.
-        print("\033[2J\033[H", end="")
+        if os.name == "nt":
+            os.system("cls")
+        else:
+            os.system("clear")
 
         now = datetime.now(timezone.utc).isoformat()
         print(f"[{now}] heartbeat — fetching 15m candles from Coinbase public API...\n")
