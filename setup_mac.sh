@@ -21,8 +21,11 @@ if [ ! -f manual_journal.csv ]; then
     "https://raw.githubusercontent.com/shawnzyluxe-lab/aegis-manual-lab/main/manual_journal.csv"
 fi
 
-echo "[setup] stopping any existing manual_lab screen session ..."
-screen -X -S manual_lab quit >/dev/null 2>&1 || true
+echo "[setup] stopping any existing manual_lab screen sessions ..."
+screen -ls | grep -E '\.manual_lab\s+' | awk '{print $1}' | while read -r session; do
+  screen -X -S "$session" quit >/dev/null 2>&1 || true
+done
+screen -wipe >/dev/null 2>&1 || true
 
 echo "[setup] verifying Python 3 ..."
 if ! command -v python3 >/dev/null 2>&1; then
