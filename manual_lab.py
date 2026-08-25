@@ -25,11 +25,11 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "0.2.0"
-USER_AGENT = "aegis-manual-lab/0.2 (read-only observation sandbox)"
+VERSION = "0.3.0"
+USER_AGENT = "aegis-manual-lab/0.3 (read-only observation sandbox)"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles?granularity=900"
 
 # macOS python.org builds sometimes lack system root certs; fall back to certifi
@@ -254,7 +254,15 @@ def _is_already_logged(rows: list[dict], alert: Alert) -> bool:
     return any(r.get("timestamp") == timestamp and r.get("token") == alert.token for r in rows)
 
 
-def print_alert(alert: Alert) -> None:
+def _find_existing_row(rows: list[dict], alert: Alert) -> dict | None:
+    timestamp = _iso(alert.signal_time)
+    for r in rows:
+        if r.get("timestamp") == timestamp and r.get("token") == alert.token:
+            return r
+    return None
+
+
+def print_alert(alert: Alert, *, header: str = "NEW BUY ANOMALY", next_wake: str | None = None) -> None:
     """Print a dark-formatted terminal block with the manual execution instruction."""
     token = alert.token
     entry = f"{alert.entry:.4f}"
@@ -262,20 +270,24 @@ def print_alert(alert: Alert) -> None:
     tp = f"{alert.take_profit:.4f}"
     outcome = alert.outcome
     pn = f"{alert.pct_pnl:.4f}%" if alert.pct_pnl is not None else "PENDING"
+    signal_time = _iso(alert.signal_time)
 
     lines = [
         "",
-        "  MANUAL CRYPTO ADVISORY — BUY ANOMALY DETECTED  ",
-        f"  TOKEN    : {token}",
-        f"  SIGNAL   : 15m close dropped below 9-EMA",
-        f"  ACTION   : BUY $10.00 market order of {token}",
-        f"  ENTRY    : {entry}",
-        f"  STOP-LOSS: {stop} ({token} -1.0%)",
-        f"  TAKE-PROF: {tp} ({token} +2.0%)",
-        f"  FORWARD  : {outcome} ({pn})",
-        "  This is a manual instruction only. No automated execution occurs.",
-        "",
+        f"  MANUAL CRYPTO ADVISORY — {header}  ",
+        f"  TOKEN      : {token}",
+        f"  SIGNAL     : 15m close dropped below 9-EMA",
+        f"  SIGNAL TIME: {signal_time}",
+        f"  ACTION     : BUY $10.00 market order of {token}",
+        f"  ENTRY      : {entry}",
+        f"  STOP-LOSS  : {stop} ({token} -1.0%)",
+        f"  TAKE-PROF  : {tp} ({token} +2.0%)",
+        f"  FORWARD    : {outcome} ({pn})",
     ]
+    if next_wake:
+        lines.append(f"  NEXT WAKE  : {next_wake}")
+    lines.append("  This is a manual instruction only. No automated execution occurs.")
+    lines.append("")
     width = max(len(line) for line in lines)
     box = "\n".join(line.center(width) for line in lines)
 
@@ -297,11 +309,14 @@ def main() -> int:
         print("\n" * shutil.get_terminal_size().lines)
         print("=" * 68)
 
-        now = datetime.now(timezone.utc).isoformat()
+        now_dt = datetime.now(timezone.utc)
+        now = now_dt.isoformat()
+        next_wake = (now_dt + timedelta(seconds=900)).isoformat()
         print(f"[{now}] heartbeat — fetching 15m candles from Coinbase public API...\n")
 
         journal_rows = _load_journal()
         new_alerts: list[Alert] = []
+        updated_alerts: list[Alert] = []
 
         for token in UNIVERSE:
             candles = fetch_candles(token)
@@ -309,22 +324,35 @@ def main() -> int:
                 continue
 
             ema = compute_ema9(candles)
-            _update_pending(journal_rows, token, candles)
 
             alert = detect_latest_signal(candles, ema, token)
-            if alert is not None and not _is_already_logged(journal_rows, alert):
-                new_alerts.append(alert)
-                journal_rows.append(alert.as_dict())
+            if alert is not None:
+                existing = _find_existing_row(journal_rows, alert)
+                if existing is None:
+                    new_alerts.append(alert)
+                    journal_rows.append(alert.as_dict())
+                else:
+                    old_outcome = existing.get("outcome", "")
+                    old_pct = existing.get("pct_pnl", "")
+                    new_pct = f"{alert.pct_pnl:.4f}" if alert.pct_pnl is not None else ""
+                    if alert.outcome != old_outcome or new_pct != old_pct:
+                        updated_alerts.append(alert)
+                        existing.update(alert.as_dict())
+
+            _update_pending(journal_rows, token, candles)
 
         for alert in new_alerts:
-            print_alert(alert)
+            print_alert(alert, header="NEW BUY ANOMALY", next_wake=next_wake)
+        for alert in updated_alerts:
+            print_alert(alert, header="OUTCOME RESOLVED", next_wake=next_wake)
 
         _save_journal(journal_rows)
 
         print(f"[{now}] Total alerts in journal: {len(journal_rows)}")
-        if not new_alerts:
-            print(f"[{now}] No new 15m/9-EMA buy anomalies detected in this wake-up.")
-        print(f"\n[{now}] sleeping 15 minutes before next scan...")
+        print(f"[{now}] New this wake: {len(new_alerts)} | Resolved this wake: {len(updated_alerts)}")
+        if not new_alerts and not updated_alerts:
+            print(f"[{now}] No new or updated 15m/9-EMA buy anomalies in this wake-up.")
+        print(f"\n[{now}] sleeping until next wake at {next_wake} ...")
 
         time.sleep(900)
 
