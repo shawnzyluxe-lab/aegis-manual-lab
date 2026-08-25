@@ -26,8 +26,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "0.3.2"
-USER_AGENT = "aegis-manual-lab/0.3.2 (read-only observation sandbox)"
+VERSION = "0.3.3"
+USER_AGENT = "aegis-manual-lab/0.3.3 (read-only observation sandbox)"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles?granularity=900"
 
 # macOS python.org builds sometimes lack system root certs; fall back to certifi
@@ -260,8 +260,12 @@ def _find_existing_row(rows: list[dict], alert: Alert) -> dict | None:
     return None
 
 
-def print_alert(alert: Alert, *, header: str = "NEW BUY ANOMALY", next_wake: str | None = None) -> None:
-    """Print a dark-formatted terminal block with the manual execution instruction."""
+def print_alert(alert: Alert, *, header: str = "NEW BUY ANOMALY", next_wake: str | None = None, now_ts: int = 0) -> None:
+    """Print a dark-formatted terminal block with the manual execution instruction.
+
+    Fresh alerts (<= 15 minutes old) are printed in green. Stale alerts
+    (> 15 minutes old) are printed in red so old tickets are easy to spot.
+    """
     token = alert.token
     entry = f"{alert.entry:.4f}"
     stop = f"{alert.stop:.4f}"
@@ -269,10 +273,13 @@ def print_alert(alert: Alert, *, header: str = "NEW BUY ANOMALY", next_wake: str
     outcome = alert.outcome
     pn = f"{alert.pct_pnl:.4f}%" if alert.pct_pnl is not None else "PENDING"
     signal_time = _iso(alert.signal_time)
+    age_seconds = now_ts - alert.signal_time
+    is_fresh = age_seconds <= 900
 
+    status = "FRESH" if is_fresh else f"STALE ({age_seconds // 60}m old)"
     lines = [
         "",
-        f"  MANUAL CRYPTO ADVISORY — {header}  ",
+        f"  MANUAL CRYPTO ADVISORY — {header} ({status})  ",
         f"  TOKEN      : {token}",
         f"  SIGNAL     : 15m close dropped below 9-EMA",
         f"  SIGNAL TIME: {signal_time}",
@@ -289,11 +296,13 @@ def print_alert(alert: Alert, *, header: str = "NEW BUY ANOMALY", next_wake: str
     width = max(len(line) for line in lines)
     box = "\n".join(line.center(width) for line in lines)
 
-    # Dark background with bright green text for visibility.
-    print(f"\033[40m\033[1;32m{'#' * width}\033[0m")
+    # Green for fresh alerts, red for stale ones.
+    color = "\033[40m\033[1;32m" if is_fresh else "\033[40m\033[1;31m"
+    reset = "\033[0m"
+    print(f"{color}{'#' * width}{reset}")
     for line in lines:
-        print(f"\033[40m\033[1;32m{line:<{width}}\033[0m")
-    print(f"\033[40m\033[1;32m{'#' * width}\033[0m\n")
+        print(f"{color}{line:<{width}}{reset}")
+    print(f"{color}{'#' * width}{reset}\n")
 
 
 def main() -> int:
@@ -340,10 +349,11 @@ def main() -> int:
 
             _update_pending(journal_rows, token, candles)
 
+        now_ts = int(now_dt.timestamp())
         for alert in new_alerts:
-            print_alert(alert, header="NEW BUY ANOMALY", next_wake=next_wake)
+            print_alert(alert, header="NEW BUY ANOMALY", next_wake=next_wake, now_ts=now_ts)
         for alert in updated_alerts:
-            print_alert(alert, header="OUTCOME RESOLVED", next_wake=next_wake)
+            print_alert(alert, header="OUTCOME RESOLVED", next_wake=next_wake, now_ts=now_ts)
 
         _save_journal(journal_rows)
 
