@@ -19,7 +19,6 @@ integrate with `run_daily.py`.
 import csv
 import json
 import os
-import shutil
 import ssl
 import time
 import urllib.error
@@ -28,8 +27,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "0.3.0"
-USER_AGENT = "aegis-manual-lab/0.3 (read-only observation sandbox)"
+VERSION = "0.3.1"
+USER_AGENT = "aegis-manual-lab/0.3.1 (read-only observation sandbox)"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles?granularity=900"
 
 # macOS python.org builds sometimes lack system root certs; fall back to certifi
@@ -304,9 +303,8 @@ def main() -> int:
     print("starting 15-minute background loop. press Ctrl+C to stop.\n")
 
     while True:
-        # Scroll the visible screen so old escape-sequence garbage is pushed out
-        # of view, then draw a fresh separator. No ANSI clear codes are used.
-        print("\n" * shutil.get_terminal_size().lines)
+        # Clear the screen so old escape-sequence scrollback is not visible.
+        os.system("clear")
         print("=" * 68)
 
         now_dt = datetime.now(timezone.utc)
