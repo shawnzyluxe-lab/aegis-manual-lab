@@ -28,7 +28,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-USER_AGENT = "aegis-manual-lab/0.1 (read-only observation sandbox)"
+VERSION = "0.2.0"
+USER_AGENT = "aegis-manual-lab/0.2 (read-only observation sandbox)"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles?granularity=900"
 
 # macOS python.org builds sometimes lack system root certs; fall back to certifi
@@ -286,7 +287,8 @@ def print_alert(alert: Alert) -> None:
 
 
 def main() -> int:
-    print("manual_lab.py — read-only manual crypto advisory sandbox")
+    print(f"manual_lab.py v{VERSION} — read-only manual crypto advisory sandbox")
+    print("no exchange write endpoints / no automated order execution")
     print("starting 15-minute background loop. press Ctrl+C to stop.\n")
 
     while True:
