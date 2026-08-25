@@ -2,8 +2,9 @@
 # setup_mac.sh — one-step installer for the Aegis Manual Crypto Lab on macOS.
 #
 # This script clones/pulls the read-only advisory script to a folder on your
-# Desktop, verifies Python 3 is installed, then starts a `screen` session that
-# auto-refreshes every 15 minutes.
+# Desktop, verifies Python 3 is installed, then starts the script in the
+# background with nohup. It tails the log so the terminal auto-refreshes every
+# 15 minutes without screen/tmux artifacts.
 
 set -e
 
@@ -40,11 +41,7 @@ fi
 
 cd "$LAB_DIR"
 
-echo "[setup] stopping any existing manual_lab screen sessions and processes ..."
-screen -ls 2>/dev/null | grep -E '\.manual_lab\s+' | awk '{print $1}' | while read -r session; do
-  screen -X -S "$session" quit >/dev/null 2>&1 || true
-done
-screen -wipe >/dev/null 2>&1 || true
+echo "[setup] stopping any existing manual_lab processes ..."
 pkill -f "AegisManualLab/manual_lab.py" >/dev/null 2>&1 || true
 
 echo "[setup] verifying Python 3 ..."
@@ -54,10 +51,15 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "[setup] starting live auto-refresh session ..."
-sleep 1
-screen -dmS manual_lab python3 -u "$LAB_DIR/manual_lab.py"
+echo "[setup] starting background live auto-refresh ..."
+# Rotate old log so we start with a clean tail.
+if [ -f manual_lab.log ]; then
+  mv manual_lab.log "manual_lab.log.$(date +%Y%m%d%H%M%S)"
+fi
+nohup python3 -u "$LAB_DIR/manual_lab.py" > "$LAB_DIR/manual_lab.log" 2>&1 &
 
-echo "[setup] attaching to the live terminal ..."
-echo "Press Ctrl+A then D to detach (it keeps running in the background)."
-exec screen -r manual_lab
+echo "[setup] PID: $! — tailing log now ..."
+echo "Press Ctrl+C to stop watching (the script keeps running in the background)."
+echo "To stop the script later, run: pkill -f AegisManualLab/manual_lab.py"
+sleep 2
+tail -f "$LAB_DIR/manual_lab.log"
