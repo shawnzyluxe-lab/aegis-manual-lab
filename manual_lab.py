@@ -18,7 +18,6 @@ integrate with `run_daily.py`.
 
 import csv
 import json
-import os
 import ssl
 import time
 import urllib.error
@@ -27,8 +26,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-VERSION = "0.3.1"
-USER_AGENT = "aegis-manual-lab/0.3.1 (read-only observation sandbox)"
+VERSION = "0.3.2"
+USER_AGENT = "aegis-manual-lab/0.3.2 (read-only observation sandbox)"
 COINBASE_CANDLES = "https://api.exchange.coinbase.com/products/{product}/candles?granularity=900"
 
 # macOS python.org builds sometimes lack system root certs; fall back to certifi
@@ -302,15 +301,17 @@ def main() -> int:
     print("no exchange write endpoints / no automated order execution")
     print("starting 15-minute background loop. press Ctrl+C to stop.\n")
 
+    wake_count = 0
     while True:
-        # Clear the screen so old escape-sequence scrollback is not visible.
-        os.system("clear")
-        print("=" * 68)
-
+        wake_count += 1
         now_dt = datetime.now(timezone.utc)
         now = now_dt.isoformat()
         next_wake = (now_dt + timedelta(seconds=900)).isoformat()
-        print(f"[{now}] heartbeat — fetching 15m candles from Coinbase public API...\n")
+
+        # Draw a fresh separator so each wake is easy to spot in the scrollback.
+        print("\n" + "=" * 68)
+        print(f"[{now}] WAKE #{wake_count} — fetching 15m candles from Coinbase public API...")
+        print("=" * 68 + "\n")
 
         journal_rows = _load_journal()
         new_alerts: list[Alert] = []
